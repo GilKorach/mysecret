@@ -12,6 +12,15 @@ router.get('/', requireAuth, async (req, res, next) => {
        LEFT JOIN users a ON a.id = n.actor_id
        LEFT JOIN secrets s ON s.id = n.secret_id
        WHERE n.user_id = :id
+         AND (n.secret_id IS NULL OR s.is_deleted = 0)
+         AND NOT EXISTS (
+           SELECT 1 FROM blocked_users b
+           WHERE n.actor_id IS NOT NULL
+             AND (
+               (b.blocker_id = :id AND b.blocked_id = n.actor_id)
+               OR (b.blocker_id = n.actor_id AND b.blocked_id = :id)
+             )
+         )
        ORDER BY n.created_at DESC
        LIMIT 80`,
       { id: req.user.id }

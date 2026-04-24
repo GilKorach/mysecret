@@ -34,6 +34,28 @@ button, input, textarea, select {
   font: inherit;
 }
 
+button,
+.input,
+.textarea,
+.select,
+.field label,
+.notice,
+.search-row,
+.comment,
+.profile-header,
+.secret-meta,
+.hero,
+.form {
+  text-align: right;
+}
+
+input:not([type="color"]),
+textarea,
+select {
+  direction: rtl;
+  text-align: right;
+}
+
 .app-shell {
   width: min(100%, 860px);
   min-height: 100vh;
@@ -147,6 +169,10 @@ button, input, textarea, select {
   border: 1px solid var(--line);
   background: rgba(255,255,255,.045);
   border-radius: 8px;
+}
+
+.search-row {
+  padding: 1rem;
 }
 
 .secret-card {

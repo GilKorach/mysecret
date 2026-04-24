@@ -17,14 +17,14 @@ function validateConfig() {
 module.exports = {
   validateConfig,
   env: {
-    nodeEnv: process.env.NODE_ENV || 'development',
-    port: Number(process.env.PORT || 4000),
+    nodeEnv: process.env.NODE_ENV || 'production',
+    port: Number(process.env.PORT || 3001),
     jwtSecret: process.env.JWT_SECRET || '',
     jwtExpiresIn: process.env.JWT_EXPIRES_IN || '7d',
     db: {
-      host: process.env.DB_HOST || '127.0.0.1',
+      host: process.env.DB_HOST || 'localhost',
       port: Number(process.env.DB_PORT || 3306),
-      user: process.env.DB_USER || 'root',
+      user: process.env.DB_USER || 'AI',
       password: process.env.DB_PASSWORD || '',
       database: process.env.DB_NAME || 'MySecret',
       charset: 'utf8mb4'

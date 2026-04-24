@@ -8,14 +8,31 @@ const router = express.Router();
 router.post('/secret/:secretId', requireAuth, async (req, res, next) => {
   try {
     const data = schemas.comment.parse(req.body);
+    const secrets = await query(
+      `SELECT s.id, s.user_id
+       FROM secrets s
+       WHERE s.id = :secretId AND s.is_deleted = 0
+         AND NOT EXISTS (
+           SELECT 1 FROM blocked_users b
+           WHERE (b.blocker_id = :viewerId AND b.blocked_id = s.user_id)
+              OR (b.blocker_id = s.user_id AND b.blocked_id = :viewerId)
+         )
+       LIMIT 1`,
+      { secretId: req.params.secretId, viewerId: req.user.id }
+    );
+    if (!secrets[0]) return res.status(404).json({ message: 'הסוד לא נמצא' });
+
     if (data.parentId) {
       const parent = await query(
-        'SELECT id, parent_id FROM comments WHERE id = :id AND secret_id = :secretId AND is_deleted = 0',
+        `SELECT id, parent_id, user_id
+         FROM comments
+         WHERE id = :id AND secret_id = :secretId AND is_deleted = 0`,
         { id: data.parentId, secretId: req.params.secretId }
       );
       if (!parent[0]) return res.status(404).json({ message: 'התגובה שאליה הגבת לא נמצאה' });
       if (parent[0].parent_id) return res.status(400).json({ message: 'אפשר להגיב רק ברמה אחת' });
     }
+
     const result = await transaction(async (conn) => {
       const [insert] = await conn.execute(
         'INSERT INTO comments (secret_id, user_id, parent_id, content) VALUES (:secretId, :userId, :parentId, :content)',
@@ -27,7 +44,11 @@ router.post('/secret/:secretId', requireAuth, async (req, res, next) => {
            SELECT c.user_id, :actor, 'comment_reply', :secretId, :commentId
            FROM comments c
            WHERE c.id = :parentId AND c.user_id <> :actor
-            AND NOT EXISTS (SELECT 1 FROM blocked_users b WHERE b.blocker_id = c.user_id AND b.blocked_id = :actor)`,
+            AND NOT EXISTS (
+              SELECT 1 FROM blocked_users b
+              WHERE (b.blocker_id = c.user_id AND b.blocked_id = :actor)
+                 OR (b.blocker_id = :actor AND b.blocked_id = c.user_id)
+            )`,
           { actor: req.user.id, secretId: req.params.secretId, commentId: insert.insertId, parentId: data.parentId }
         );
       } else {
@@ -36,7 +57,11 @@ router.post('/secret/:secretId', requireAuth, async (req, res, next) => {
            SELECT s.user_id, :actor, 'secret_comment', s.id, :commentId
            FROM secrets s
            WHERE s.id = :secretId AND s.user_id <> :actor
-            AND NOT EXISTS (SELECT 1 FROM blocked_users b WHERE b.blocker_id = s.user_id AND b.blocked_id = :actor)`,
+            AND NOT EXISTS (
+              SELECT 1 FROM blocked_users b
+              WHERE (b.blocker_id = s.user_id AND b.blocked_id = :actor)
+                 OR (b.blocker_id = :actor AND b.blocked_id = s.user_id)
+            )`,
           { actor: req.user.id, secretId: req.params.secretId, commentId: insert.insertId }
         );
       }
@@ -51,7 +76,7 @@ router.post('/secret/:secretId', requireAuth, async (req, res, next) => {
 router.delete('/:id', requireAuth, async (req, res, next) => {
   try {
     const result = await query(
-      'UPDATE comments SET is_deleted = 1, deleted_at = UTC_TIMESTAMP() WHERE id = :id AND user_id = :userId',
+      'UPDATE comments SET is_deleted = 1, deleted_at = UTC_TIMESTAMP() WHERE id = :id AND user_id = :userId AND is_deleted = 0',
       { id: req.params.id, userId: req.user.id }
     );
     if (!result.affectedRows) return res.status(404).json({ message: 'התגובה לא נמצאה' });
@@ -64,6 +89,21 @@ router.delete('/:id', requireAuth, async (req, res, next) => {
 router.put('/:id/reaction', requireAuth, async (req, res, next) => {
   try {
     const reaction = schemas.reaction.parse(req.body.reaction);
+    const comments = await query(
+      `SELECT c.id, c.user_id
+       FROM comments c
+       JOIN secrets s ON s.id = c.secret_id
+       WHERE c.id = :commentId AND c.is_deleted = 0 AND s.is_deleted = 0
+         AND NOT EXISTS (
+           SELECT 1 FROM blocked_users b
+           WHERE (b.blocker_id = :viewerId AND b.blocked_id = c.user_id)
+              OR (b.blocker_id = c.user_id AND b.blocked_id = :viewerId)
+         )
+       LIMIT 1`,
+      { commentId: req.params.id, viewerId: req.user.id }
+    );
+    if (!comments[0]) return res.status(404).json({ message: 'התגובה לא נמצאה' });
+
     await query(
       `INSERT INTO comment_reactions (comment_id, user_id, reaction)
        VALUES (:commentId, :userId, :reaction)

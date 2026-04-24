@@ -21,21 +21,69 @@ router.get('/feed', optionalAuth, async (req, res, next) => {
     const limit = Math.min(Number(req.query.limit || 20), 50);
     const offset = Number(req.query.offset || 0);
     const rows = await query(
-      `${selectSecret}
-       LEFT JOIN followers f ON f.following_id = s.user_id AND f.follower_id = :viewerId
-       WHERE s.is_deleted = 0
-        AND NOT EXISTS (
-          SELECT 1 FROM blocked_users b
-          WHERE (b.blocker_id = :viewerId AND b.blocked_id = s.user_id)
-             OR (b.blocker_id = s.user_id AND b.blocked_id = :viewerId)
-        )
-       ORDER BY
-        (CASE WHEN f.follower_id IS NOT NULL THEN 8 ELSE 0 END) +
-        (SELECT COUNT(*) FROM secret_reactions sr WHERE sr.secret_id = s.id) * 3 +
-        (SELECT COUNT(*) FROM comments c WHERE c.secret_id = s.id AND c.is_deleted = 0) * 4 +
-        GREATEST(0, 48 - TIMESTAMPDIFF(HOUR, s.created_at, UTC_TIMESTAMP())) DESC,
-        s.created_at DESC
-       LIMIT ${limit} OFFSET ${offset}`,
+      `
+      WITH visible_secrets AS (
+        SELECT
+          s.id,
+          s.user_id,
+          s.created_at,
+          COALESCE((SELECT COUNT(*) FROM secret_reactions sr WHERE sr.secret_id = s.id), 0) AS reactions_count,
+          COALESCE((SELECT COUNT(*) FROM comments c WHERE c.secret_id = s.id AND c.is_deleted = 0), 0) AS comments_count
+        FROM secrets s
+        WHERE s.is_deleted = 0
+          AND NOT EXISTS (
+            SELECT 1 FROM blocked_users b
+            WHERE (b.blocker_id = :viewerId AND b.blocked_id = s.user_id)
+               OR (b.blocker_id = s.user_id AND b.blocked_id = :viewerId)
+          )
+      ),
+      newest AS (
+        SELECT id, created_at, 120 AS source_score
+        FROM visible_secrets
+        ORDER BY created_at DESC
+        LIMIT 30
+      ),
+      followed AS (
+        SELECT vs.id, vs.created_at, 200 AS source_score
+        FROM visible_secrets vs
+        JOIN followers f ON f.following_id = vs.user_id AND f.follower_id = :viewerId
+        ORDER BY vs.created_at DESC
+        LIMIT 30
+      ),
+      trending AS (
+        SELECT
+          id,
+          created_at,
+          (
+            reactions_count * 3 +
+            comments_count * 4 +
+            GREATEST(0, 72 - TIMESTAMPDIFF(HOUR, created_at, UTC_TIMESTAMP()))
+          ) AS source_score
+        FROM visible_secrets
+        ORDER BY source_score DESC, created_at DESC
+        LIMIT 30
+      ),
+      feed_candidates AS (
+        SELECT * FROM newest
+        UNION ALL
+        SELECT * FROM followed
+        UNION ALL
+        SELECT * FROM trending
+      ),
+      ranked_feed AS (
+        SELECT
+          id,
+          MAX(source_score) AS best_score,
+          SUM(source_score) AS mixed_score,
+          MAX(created_at) AS created_at
+        FROM feed_candidates
+        GROUP BY id
+      )
+      ${selectSecret}
+      JOIN ranked_feed rf ON rf.id = s.id
+      ORDER BY rf.mixed_score DESC, rf.best_score DESC, rf.created_at DESC
+      LIMIT ${limit} OFFSET ${offset}
+      `,
       { viewerId }
     );
     res.json({ secrets: rows.map(secretRow), nextOffset: offset + rows.length });
@@ -59,7 +107,7 @@ router.post('/', requireAuth, async (req, res, next) => {
        VALUES (:userId, :content, :title, :slug, :backgroundPreset, :backgroundColor, :textColor, :textAlign)`,
       { ...data, userId: req.user.id, title, slug }
     );
-    const rows = await query(`${selectSecret} WHERE s.id = :id`, { id: result.insertId, viewerId: req.user.id });
+    const rows = await query(`${selectSecret} WHERE s.id = :id AND s.is_deleted = 0`, { id: result.insertId, viewerId: req.user.id });
     res.status(201).json({ secret: secretRow(rows[0]) });
   } catch (error) {
     next(error);
@@ -104,7 +152,9 @@ router.get('/:id/:slug?', optionalAuth, async (req, res, next) => {
 router.delete('/:id', requireAuth, async (req, res, next) => {
   try {
     const result = await query(
-      'UPDATE secrets SET is_deleted = 1, deleted_at = UTC_TIMESTAMP() WHERE id = :id AND user_id = :userId',
+      `UPDATE secrets
+       SET is_deleted = 1, deleted_at = UTC_TIMESTAMP()
+       WHERE id = :id AND user_id = :userId AND is_deleted = 0`,
       { id: req.params.id, userId: req.user.id }
     );
     if (!result.affectedRows) return res.status(404).json({ message: 'הסוד לא נמצא' });
@@ -117,6 +167,20 @@ router.delete('/:id', requireAuth, async (req, res, next) => {
 router.put('/:id/reaction', requireAuth, async (req, res, next) => {
   try {
     const reaction = schemas.reaction.parse(req.body.reaction);
+    const targets = await query(
+      `SELECT s.id, s.user_id
+       FROM secrets s
+       WHERE s.id = :secretId AND s.is_deleted = 0
+         AND NOT EXISTS (
+           SELECT 1 FROM blocked_users b
+           WHERE (b.blocker_id = :viewerId AND b.blocked_id = s.user_id)
+              OR (b.blocker_id = s.user_id AND b.blocked_id = :viewerId)
+         )
+       LIMIT 1`,
+      { secretId: req.params.id, viewerId: req.user.id }
+    );
+    if (!targets[0]) return res.status(404).json({ message: 'הסוד לא נמצא' });
+
     await transaction(async (conn) => {
       await conn.execute(
         `INSERT INTO secret_reactions (secret_id, user_id, reaction)
@@ -129,7 +193,11 @@ router.put('/:id/reaction', requireAuth, async (req, res, next) => {
          SELECT s.user_id, :actor, 'secret_reaction', s.id
          FROM secrets s
          WHERE s.id = :secretId AND s.user_id <> :actor
-          AND NOT EXISTS (SELECT 1 FROM blocked_users b WHERE b.blocker_id = s.user_id AND b.blocked_id = :actor)`,
+          AND NOT EXISTS (
+            SELECT 1 FROM blocked_users b
+            WHERE (b.blocker_id = s.user_id AND b.blocked_id = :actor)
+               OR (b.blocker_id = :actor AND b.blocked_id = s.user_id)
+          )`,
         { secretId: req.params.id, actor: req.user.id }
       );
     });

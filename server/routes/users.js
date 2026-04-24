@@ -6,18 +6,37 @@ const { publicUser, secretRow } = require('../utils');
 
 const router = express.Router();
 
+router.patch('/me/profile', requireAuth, async (req, res, next) => {
+  try {
+    const data = schemas.profile.parse(req.body);
+    await query('UPDATE users SET bio = :bio, external_link = :externalLink WHERE id = :id', {
+      id: req.user.id,
+      bio: data.bio || null,
+      externalLink: data.externalLink || null
+    });
+    res.json({ ok: true });
+  } catch (error) {
+    next(error);
+  }
+});
+
 router.get('/:id', optionalAuth, async (req, res, next) => {
   try {
+    const viewerId = req.user?.id || 0;
     const userRows = await query(
       `SELECT u.*, COUNT(f.follower_id) followers_count
        FROM users u
        LEFT JOIN followers f ON f.following_id = u.id
        WHERE u.id = :id AND u.is_active = 1
+        AND NOT EXISTS (
+          SELECT 1 FROM blocked_users b
+          WHERE (b.blocker_id = :viewerId AND b.blocked_id = u.id)
+             OR (b.blocker_id = u.id AND b.blocked_id = :viewerId)
+        )
        GROUP BY u.id`,
-      { id: req.params.id }
+      { id: req.params.id, viewerId }
     );
     if (!userRows[0]) return res.status(404).json({ message: 'המשתמש לא נמצא' });
-    const viewerId = req.user?.id || 0;
     const secrets = await query(
       `SELECT s.*, u.nickname,
         (SELECT COUNT(*) FROM secret_reactions sr WHERE sr.secret_id = s.id) reactions_count,
@@ -41,20 +60,6 @@ router.get('/:id', optionalAuth, async (req, res, next) => {
   }
 });
 
-router.patch('/me/profile', requireAuth, async (req, res, next) => {
-  try {
-    const data = schemas.profile.parse(req.body);
-    await query('UPDATE users SET bio = :bio, external_link = :externalLink WHERE id = :id', {
-      id: req.user.id,
-      bio: data.bio || null,
-      externalLink: data.externalLink || null
-    });
-    res.json({ ok: true });
-  } catch (error) {
-    next(error);
-  }
-});
-
 router.post('/:id/follow', requireAuth, async (req, res, next) => {
   try {
     const followingId = Number(req.params.id);
@@ -63,7 +68,11 @@ router.post('/:id/follow', requireAuth, async (req, res, next) => {
     await query(
       `INSERT INTO notifications (user_id, actor_id, type)
        SELECT :them, :me, 'follow'
-       WHERE NOT EXISTS (SELECT 1 FROM blocked_users WHERE blocker_id = :them AND blocked_id = :me)`,
+       WHERE NOT EXISTS (
+         SELECT 1 FROM blocked_users b
+         WHERE (b.blocker_id = :them AND b.blocked_id = :me)
+            OR (b.blocker_id = :me AND b.blocked_id = :them)
+       )`,
       { me: req.user.id, them: followingId }
     );
     res.json({ ok: true });
@@ -90,6 +99,12 @@ router.post('/:id/block', requireAuth, async (req, res, next) => {
       `DELETE FROM followers
        WHERE (follower_id = :me AND following_id = :them)
           OR (follower_id = :them AND following_id = :me)`,
+      { me: req.user.id, them: blockedId }
+    );
+    await query(
+      `DELETE FROM notifications
+       WHERE (user_id = :me AND actor_id = :them)
+          OR (user_id = :them AND actor_id = :me)`,
       { me: req.user.id, them: blockedId }
     );
     res.json({ ok: true });

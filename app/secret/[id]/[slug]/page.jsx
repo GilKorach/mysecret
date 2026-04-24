@@ -58,7 +58,7 @@ export default function SecretPage({ params }) {
       <SecretCard secret={secret} onChanged={load} />
       <section className="grid" style={{ marginTop: '1rem' }}>
         <form className="form auth-panel" onSubmit={submit}>
-          <textarea className="textarea" placeholder={replyTo ? 'תגובה לתגובה' : 'תגובה לסוד'} required value={content} onChange={(e) => setContent(e.target.value)} />
+          <textarea className="textarea" placeholder={replyTo ? 'תגובה לתגובה' : 'תגובה לסוד'} required maxLength="500" value={content} onChange={(e) => setContent(e.target.value)} />
           <div className="actions">
             <button className="btn primary">שליחת תגובה</button>
             {replyTo && <button className="btn" type="button" onClick={() => setReplyTo(null)}>ביטול תגובה</button>}

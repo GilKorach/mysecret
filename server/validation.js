@@ -25,7 +25,7 @@ const secret = z.object({
 });
 
 const comment = z.object({
-  content: z.string().trim().min(1).max(1500),
+  content: z.string().trim().min(1).max(500),
   parentId: z.coerce.number().int().positive().optional().nullable()
 });
 

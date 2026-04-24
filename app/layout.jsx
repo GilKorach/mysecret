@@ -3,7 +3,7 @@ import './globals.css';
 
 export const metadata = {
   title: 'MySecret',
-  description: 'רשת חברתית אנונימית לשיתוף סודות. מקום שבו אפשר להגיד הכל.'
+  description: 'רשת חברתית אנונימית לשיתוף סודות. מקום שבו אפשר להגיד הכל!'
 };
 
 export default function RootLayout({ children }) {

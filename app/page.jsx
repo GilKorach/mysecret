@@ -57,7 +57,7 @@ export default function HomePage() {
   return (
     <main className="main">
       <section className="hero">
-        <p>רשת חברתית אנונימית לשיתוף סודות. מקום שבו אפשר להגיד הכל.</p>
+        <p>רשת חברתית אנונימית לשיתוף סודות. מקום שבו אפשר להגיד הכל!</p>
         <div className="actions">
           <Link className="btn primary" href="/create">לכתוב סוד</Link>
           <Link className="btn" href="/register">להצטרף</Link>

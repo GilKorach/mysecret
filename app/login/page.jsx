@@ -1,7 +1,7 @@
-'use client';
+﻿'use client';
 
 import { useState } from 'react';
-import { api, setToken } from '@/lib/api';
+import { api } from '@/lib/api';
 
 export default function LoginPage() {
   const [form, setForm] = useState({ email: '', password: '' });
@@ -11,8 +11,7 @@ export default function LoginPage() {
     event.preventDefault();
     setError('');
     try {
-      const data = await api('/api/auth/login', { method: 'POST', body: JSON.stringify(form) });
-      setToken(data.token);
+      await api('/api/auth/login', { method: 'POST', body: JSON.stringify(form) });
       window.location.href = '/';
     } catch (err) {
       setError(err.message);

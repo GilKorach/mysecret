@@ -31,7 +31,21 @@ const comment = z.object({
 
 const profile = z.object({
   bio: z.string().trim().max(500).optional().nullable(),
-  externalLink: z.string().trim().url().max(500).optional().nullable()
+  externalLink: z
+    .string()
+    .trim()
+    .url()
+    .max(500)
+    .refine((value) => {
+      try {
+        const protocol = new URL(value).protocol;
+        return protocol === 'http:' || protocol === 'https:';
+      } catch (_error) {
+        return false;
+      }
+    }, { message: 'externalLink must use http or https' })
+    .optional()
+    .nullable()
 });
 
 const report = z.object({

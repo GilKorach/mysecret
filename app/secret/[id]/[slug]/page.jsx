@@ -2,6 +2,7 @@
 
 import { use, useEffect, useState } from 'react';
 import { api } from '@/lib/api';
+import { openAuthModal } from '@/lib/auth-modal';
 import SecretCard, { ReportButton } from '@/components/SecretCard';
 
 export default function SecretPage({ params }) {
@@ -18,8 +19,8 @@ export default function SecretPage({ params }) {
         const data = await api(`/api/secrets/${routeParams.id}/${routeParams.slug || ''}`);
         setSecret(data.secret);
         setComments(data.comments);
-      } catch (err) {
-        setError(err.message);
+      } catch (nextError) {
+        setError(nextError.message);
       }
     }
 
@@ -31,21 +32,37 @@ export default function SecretPage({ params }) {
       const data = await api(`/api/secrets/${routeParams.id}/${routeParams.slug || ''}`);
       setSecret(data.secret);
       setComments(data.comments);
-    } catch (err) {
-      setError(err.message);
+    } catch (nextError) {
+      setError(nextError.message);
+    }
+  }
+
+  async function postComment() {
+    try {
+      await api(`/api/comments/secret/${routeParams.id}`, {
+        method: 'POST',
+        body: JSON.stringify({ content, parentId: replyTo })
+      });
+      setContent('');
+      setReplyTo(null);
+      await load();
+    } catch (nextError) {
+      if (nextError.status === 401) {
+        openAuthModal({
+          mode: 'onboarding',
+          onSuccess: () => {
+            postComment();
+          }
+        });
+        return;
+      }
+      setError(nextError.message);
     }
   }
 
   async function submit(event) {
     event.preventDefault();
-    try {
-      await api(`/api/comments/secret/${routeParams.id}`, { method: 'POST', body: JSON.stringify({ content, parentId: replyTo }) });
-      setContent('');
-      setReplyTo(null);
-      await load();
-    } catch (err) {
-      setError(err.message);
-    }
+    await postComment();
   }
 
   if (error && !secret) return <main className="main"><div className="notice error">{error}</div></main>;
@@ -56,14 +73,23 @@ export default function SecretPage({ params }) {
   return (
     <main className="main">
       <SecretCard secret={secret} onChanged={load} />
-      <section className="grid" style={{ marginTop: '1rem' }}>
+
+      <section className="grid detail-comments">
         <form className="form auth-panel" onSubmit={submit}>
-          <textarea className="textarea" placeholder={replyTo ? 'תגובה לתגובה' : 'תגובה לסוד'} required maxLength="500" value={content} onChange={(e) => setContent(e.target.value)} />
+          <textarea
+            className="textarea"
+            placeholder={replyTo ? 'תגובה לתגובה' : 'כתוב תגובה'}
+            required
+            maxLength="500"
+            value={content}
+            onChange={(event) => setContent(event.target.value)}
+          />
           <div className="actions">
             <button className="btn primary">שליחת תגובה</button>
             {replyTo && <button className="btn" type="button" onClick={() => setReplyTo(null)}>ביטול תגובה</button>}
           </div>
         </form>
+
         <div className="grid">
           {roots.map((comment) => (
             <Comment key={comment.id} comment={comment} replies={comments.filter((reply) => reply.parent_id === comment.id)} onReply={setReplyTo} />

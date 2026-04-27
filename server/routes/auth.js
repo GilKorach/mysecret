@@ -25,7 +25,7 @@ router.post('/register', async (req, res, next) => {
     const user = { id: result.insertId, nickname: data.nickname };
     const token = sign(user);
     res.cookie('token', token, cookieOptions());
-    res.status(201).json({ token, user });
+    res.status(201).json({ user });
   } catch (error) {
     if (error.code === 'ER_DUP_ENTRY') return res.status(409).json({ message: 'הכינוי או האימייל כבר קיימים' });
     return next(error);
@@ -42,7 +42,7 @@ router.post('/login', async (req, res, next) => {
     }
     const token = sign(user);
     res.cookie('token', token, cookieOptions());
-    res.json({ token, user: { id: user.id, nickname: user.nickname } });
+    res.json({ user: { id: user.id, nickname: user.nickname } });
   } catch (error) {
     next(error);
   }

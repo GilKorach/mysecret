@@ -10,16 +10,29 @@ const { env, validateConfig } = require('./config');
 validateConfig();
 
 const dev = env.nodeEnv !== 'production';
-const nextApp = next({ dev });
-const handle = nextApp.getRequestHandler();
+const nextApp = dev ? null : next({ dev });
+const handle = nextApp ? nextApp.getRequestHandler() : null;
 
 async function main() {
-  await nextApp.prepare();
+  if (nextApp) {
+    await nextApp.prepare();
+  }
 
   const app = express();
+  const allowedOrigins = new Set(
+    dev
+      ? ['http://localhost:3000', 'http://127.0.0.1:3000', ...env.corsAllowedOrigins]
+      : env.corsAllowedOrigins
+  );
   app.set('trust proxy', 1);
   app.use(helmet({ contentSecurityPolicy: false }));
-  app.use(cors({ origin: dev ? ['http://localhost:3000'] : true, credentials: true }));
+  app.use(cors({
+    credentials: true,
+    origin(origin, callback) {
+      if (!origin) return callback(null, true);
+      return callback(null, allowedOrigins.has(origin));
+    }
+  }));
   app.use(express.json({ limit: '128kb' }));
   app.use(cookieParser());
   app.use('/api', rateLimit({ windowMs: 60 * 1000, max: 180, standardHeaders: true, legacyHeaders: false }));
@@ -33,7 +46,12 @@ async function main() {
   app.use('/api/reports', require('./routes/reports'));
 
   app.get('/health', (_req, res) => res.json({ ok: true }));
-  app.all('*', (req, res) => handle(req, res));
+
+  if (handle) {
+    app.all('*', (req, res) => handle(req, res));
+  } else {
+    app.all('*', (_req, res) => res.status(404).json({ message: 'API route not found' }));
+  }
 
   app.use((error, _req, res, _next) => {
     if (error instanceof ZodError) return res.status(400).json({ message: 'הנתונים שנשלחו אינם תקינים', issues: error.issues });

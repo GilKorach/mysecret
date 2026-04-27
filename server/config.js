@@ -21,6 +21,10 @@ module.exports = {
     port: Number(process.env.PORT || 4000),
     jwtSecret: process.env.JWT_SECRET || '',
     jwtExpiresIn: process.env.JWT_EXPIRES_IN || '7d',
+    corsAllowedOrigins: String(process.env.CORS_ORIGINS || '')
+      .split(',')
+      .map((origin) => origin.trim())
+      .filter(Boolean),
     db: {
       host: process.env.DB_HOST || 'localhost',
       port: Number(process.env.DB_PORT || 3306),

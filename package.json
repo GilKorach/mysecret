@@ -4,8 +4,8 @@
   "private": true,
   "description": "MySecret - Hebrew anonymous social network for sharing secrets",
   "scripts": {
-    "dev": "concurrently \"next dev -p 3000\" \"nodemon server/index.js\"",
-    "dev:api": "nodemon server/index.js",
+    "dev": "concurrently \"next dev -p 3000\" \"nodemon\"",
+    "dev:api": "nodemon",
     "build": "next build",
     "start": "NODE_ENV=production node server/index.js",
     "lint": "next lint",

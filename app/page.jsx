@@ -1,6 +1,5 @@
 'use client';
 
-import Link from 'next/link';
 import { useEffect, useRef, useState } from 'react';
 import { api } from '@/lib/api';
 import SecretCard from '@/components/SecretCard';
@@ -32,8 +31,8 @@ export default function HomePage() {
       setSecrets((items) => (reset ? data.secrets : [...items, ...data.secrets]));
       setOffset(data.nextOffset);
       offsetRef.current = data.nextOffset;
-    } catch (err) {
-      setError(err.message);
+    } catch (nextError) {
+      setError(nextError.message);
     } finally {
       setLoading(false);
       loadingRef.current = false;
@@ -56,17 +55,24 @@ export default function HomePage() {
 
   return (
     <main className="main">
-      <section className="hero">
-        <p>רשת חברתית אנונימית לשיתוף סודות. מקום שבו אפשר להגיד הכל!!!</p>
-        <div className="actions">
-          <Link className="btn primary" href="/create">לכתוב סוד</Link>
-          <Link className="btn" href="/register">להצטרף</Link>
-        </div>
+      <section className="feed-header">
+        <p className="eyebrow">אנונימי לחלוטין</p>
+        <h1>מה חדש בווידוי של היום?</h1>
+        <p>אפשר לקרוא בחופשיות, לפתוח סודות ופרופילים ציבוריים, ולהצטרף בשנייה כשבא לך להגיב או לפרסם.</p>
       </section>
+
       {error && <p className="error">{error}</p>}
+
       <section className="feed" aria-label="פיד סודות">
-        {secrets.map((secret) => <SecretCard key={secret.id} secret={secret} onChanged={() => load(true)} />)}
-        {loading && <div className="notice">טוען סודות...</div>}
+        {!loading && secrets.length === 0 && (
+          <div className="notice">עוד אין סודות להצגה. תהיה הראשון לשתף.</div>
+        )}
+
+        {secrets.map((secret) => (
+          <SecretCard key={secret.id} secret={secret} onChanged={() => load(true)} />
+        ))}
+
+        {loading && <div className="notice">טוען עוד סודות...</div>}
       </section>
     </main>
   );

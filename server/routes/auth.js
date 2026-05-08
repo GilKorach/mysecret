@@ -72,6 +72,7 @@ router.get('/me', requireAuth, async (req, res, next) => {
 function cookieOptions() {
   return {
     httpOnly: true,
+    path: '/',
     sameSite: 'lax',
     secure: env.nodeEnv === 'production',
     maxAge: 1000 * 60 * 60 * 24 * 7

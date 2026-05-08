@@ -4,11 +4,12 @@ import { usePathname } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
 import AuthOnboardingModal from '@/components/AuthOnboardingModal';
 import CreateSecretModal from '@/components/CreateSecretModal';
-import FloatingWriteButton from '@/components/FloatingWriteButton';
 import Header from '@/components/Header';
+import MobileBottomNav from '@/components/MobileBottomNav';
 import MobileMenu from '@/components/MobileMenu';
 import { api } from '@/lib/api';
 import { AUTH_MODAL_EVENT } from '@/lib/auth-modal';
+import { COMPOSER_MODAL_EVENT } from '@/lib/composer-modal';
 
 export default function AppShell({ children }) {
   const pathname = usePathname();
@@ -48,6 +49,22 @@ export default function AppShell({ children }) {
     return () => window.removeEventListener(AUTH_MODAL_EVENT, handleOpen);
   }, []);
 
+  useEffect(() => {
+    function handleOpenComposer() {
+      if (user) {
+        setComposeOpen(true);
+        return;
+      }
+
+      setAuthMode('login');
+      onSuccessRef.current = () => setComposeOpen(true);
+      setAuthOpen(true);
+    }
+
+    window.addEventListener(COMPOSER_MODAL_EVENT, handleOpenComposer);
+    return () => window.removeEventListener(COMPOSER_MODAL_EVENT, handleOpenComposer);
+  }, [user]);
+
   async function logout() {
     await api('/api/auth/logout', { method: 'POST' });
     setUser(null);
@@ -65,15 +82,70 @@ export default function AppShell({ children }) {
     onSuccessRef.current = null;
   }
 
+  function openComposerGuarded() {
+    if (user) {
+      setComposeOpen(true);
+      return;
+    }
+
+    setAuthMode('login');
+    onSuccessRef.current = () => setComposeOpen(true);
+    setAuthOpen(true);
+  }
+
   const overlayOpen = authOpen || composeOpen || menuOpen;
+  const shellClassName = [
+    'app-shell',
+    overlayOpen ? 'modal-open' : '',
+    pathname !== '/create' ? 'has-mobile-nav' : ''
+  ].filter(Boolean).join(' ');
+
+  useEffect(() => {
+    if (!overlayOpen) return undefined;
+
+    const scrollY = window.scrollY;
+    const previous = {
+      overflow: document.body.style.overflow,
+      position: document.body.style.position,
+      top: document.body.style.top,
+      width: document.body.style.width
+    };
+
+    document.body.style.overflow = 'hidden';
+    document.body.style.position = 'fixed';
+    document.body.style.top = `-${scrollY}px`;
+    document.body.style.width = '100%';
+
+    return () => {
+      document.body.style.overflow = previous.overflow;
+      document.body.style.position = previous.position;
+      document.body.style.top = previous.top;
+      document.body.style.width = previous.width;
+      window.scrollTo(0, scrollY);
+    };
+  }, [overlayOpen]);
 
   return (
-    <div className={`app-shell ${overlayOpen ? 'modal-open' : ''}`}>
+    <div className={shellClassName}>
       <div className="shell-content">
-        <Header user={user} onOpenMenu={() => setMenuOpen(true)} />
+        <Header
+          user={user}
+          onOpenMenu={() => setMenuOpen(true)}
+          onOpenLogin={() => { setAuthMode('login'); setAuthOpen(true); }}
+          onOpenSignup={() => { setAuthMode('signup'); setAuthOpen(true); }}
+          onLogout={logout}
+        />
         {children}
-        {pathname !== '/create' && <FloatingWriteButton onClick={() => setComposeOpen(true)} />}
       </div>
+
+      {!overlayOpen && pathname !== '/create' && (
+        <MobileBottomNav
+          user={user}
+          onOpenMenu={() => setMenuOpen(true)}
+          onOpenLogin={() => { setAuthMode('login'); setAuthOpen(true); }}
+          onOpenComposer={openComposerGuarded}
+        />
+      )}
 
       <MobileMenu
         open={menuOpen}
@@ -82,7 +154,7 @@ export default function AppShell({ children }) {
         onOpenLogin={() => { setAuthMode('login'); setAuthOpen(true); }}
         onOpenSignup={() => { setAuthMode('signup'); setAuthOpen(true); }}
         onLogout={logout}
-        onOpenComposer={() => setComposeOpen(true)}
+        onOpenComposer={openComposerGuarded}
       />
 
       <CreateSecretModal open={composeOpen} onClose={() => setComposeOpen(false)} />

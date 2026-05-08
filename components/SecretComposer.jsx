@@ -1,15 +1,12 @@
 'use client';
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 
-const themes = [
-  { id: 'violet', label: 'סגול', backgroundPreset: 'linear-gradient(135deg, #271454, #6848ff)' },
-  { id: 'blue', label: 'כחול', backgroundPreset: 'linear-gradient(135deg, #13295f, #42b8ff)' },
-  { id: 'night', label: 'לילה', backgroundPreset: 'linear-gradient(135deg, #161931, #2a2d5a)' },
-  { id: 'sunset', label: 'שקיעה', backgroundPreset: 'linear-gradient(135deg, #5b1b44, #ff7c7c)' }
+const alignmentOptions = [
+  { value: 'right', label: 'ימין' },
+  { value: 'center', label: 'מרכז' },
+  { value: 'left', label: 'שמאל' }
 ];
-
-const emojiOptions = ['', '✨', '🌙', '🫶', '💭', '🔥'];
 
 function hexToRgb(value) {
   const match = /^#([0-9a-fA-F]{6})$/.exec(value);
@@ -26,10 +23,7 @@ function luminance({ r, g, b }) {
     const normalized = channel / 255;
     return normalized <= 0.03928 ? normalized / 12.92 : ((normalized + 0.055) / 1.055) ** 2.4;
   };
-  const red = toLinear(r);
-  const green = toLinear(g);
-  const blue = toLinear(b);
-  return (0.2126 * red) + (0.7152 * green) + (0.0722 * blue);
+  return (0.2126 * toLinear(r)) + (0.7152 * toLinear(g)) + (0.0722 * toLinear(b));
 }
 
 function contrastRatio(colorA, colorB) {
@@ -61,37 +55,35 @@ export default function SecretComposer({
   submitLabel = 'פרסם סוד',
   submitLoadingLabel = 'מפרסם...'
 }) {
+  const customColorInputRef = useRef(null);
   const [form, setForm] = useState({
     content: '',
-    backgroundPreset: themes[0].backgroundPreset,
-    backgroundColor: '#37226e',
-    textColor: '#ffffff',
-    textAlign: 'right',
-    emoji: ''
+    backgroundColor: '#151A27',
+    textColor: '#F4EFE7',
+    textAlign: 'right'
   });
 
   function update(key, value) {
     setForm((current) => ({ ...current, [key]: value }));
   }
 
-  function selectTheme(theme) {
-    setForm((current) => ({ ...current, backgroundPreset: theme.backgroundPreset }));
-  }
-
   function selectBackgroundColor(value) {
     setForm((current) => ({
       ...current,
-      backgroundPreset: null,
       backgroundColor: value,
       textColor: ensureReadableTextColor(value, current.textColor)
     }));
   }
 
+  function openCustomColorPicker() {
+    customColorInputRef.current?.click();
+  }
+
   async function submit(event) {
     event.preventDefault();
     const payload = {
-      content: form.emoji ? `${form.emoji} ${form.content}` : form.content,
-      backgroundPreset: form.backgroundPreset,
+      content: form.content,
+      backgroundPreset: null,
       backgroundColor: form.backgroundColor,
       textColor: ensureReadableTextColor(form.backgroundColor, form.textColor),
       textAlign: form.textAlign
@@ -99,70 +91,77 @@ export default function SecretComposer({
     await onSubmit?.(payload);
   }
 
-  const previewBackground = form.backgroundPreset || form.backgroundColor;
-  const previewText = form.emoji ? `${form.emoji} ${form.content || 'מה הסוד שלך?'}` : (form.content || 'מה הסוד שלך?');
+  const canSubmit = form.content.trim().length >= 5 && !submitting;
+  const previewText = form.content || 'מה הסוד שלך?';
 
   return (
-    <form className="form composer-form" onSubmit={submit}>
-      <textarea
-        className="textarea compose-textarea"
-        placeholder="מה הסוד שלך?"
-        required
-        minLength={5}
-        maxLength={4000}
-        value={form.content}
-        onChange={(event) => update('content', event.target.value)}
-      />
+    <form className="form composer-form luxury-composer" onSubmit={submit}>
+      <div className="composer-editor">
+        <label className="composer-label" htmlFor="secret-content">הסוד שלך</label>
+        <textarea
+          id="secret-content"
+          className="textarea compose-textarea"
+          placeholder="מה הסוד שלך?"
+          required
+          minLength={5}
+          maxLength={4000}
+          value={form.content}
+          onChange={(event) => update('content', event.target.value)}
+        />
+      </div>
 
-      <section className="composer-panel">
+      <section className="composer-panel" aria-labelledby="composer-settings-title">
+        <h3 id="composer-settings-title">הגדרות</h3>
+
         <div className="field">
-          <label>ערכת נושא</label>
-          <div className="toolbar">
-            {themes.map((theme) => (
-              <button key={theme.id} type="button" className="chip" onClick={() => selectTheme(theme)}>
-                {theme.label}
-              </button>
-            ))}
+          <span className="composer-label">רקע הסוד</span>
+          <div className="background-grid single" role="group" aria-label="בחירת צבע רקע">
+            <button
+              type="button"
+              className="background-option custom-background-option selected"
+              style={{ '--custom-color': form.backgroundColor }}
+              onClick={openCustomColorPicker}
+              aria-label="בחירת צבע רקע מותאם"
+              aria-pressed="true"
+            >
+              <span className="custom-background-plus" aria-hidden="true">+</span>
+            </button>
           </div>
         </div>
 
-        <div className="field">
-          <label>אייקון</label>
-          <div className="toolbar">
-            {emojiOptions.map((emoji) => (
-              <button key={emoji || 'none'} type="button" className={`chip ${form.emoji === emoji ? 'primary' : ''}`} onClick={() => update('emoji', emoji)}>
-                {emoji || 'ללא'}
-              </button>
-            ))}
-          </div>
-        </div>
+        <input
+          ref={customColorInputRef}
+          className="visually-hidden-color-input"
+          id="secret-bg-color"
+          type="color"
+          aria-label="צבע רקע מותאם"
+          value={form.backgroundColor}
+          onChange={(event) => selectBackgroundColor(event.target.value)}
+        />
 
-        <div className="grid two-col">
+        <div className="composer-controls single-control">
           <div className="field">
-            <label>צבע רקע</label>
-            <input type="color" aria-label="צבע רקע" value={form.backgroundColor} onChange={(event) => selectBackgroundColor(event.target.value)} />
+            <label className="composer-label" htmlFor="secret-text-align">יישור טקסט</label>
+            <select
+              id="secret-text-align"
+              className="select composer-select"
+              value={form.textAlign}
+              onChange={(event) => update('textAlign', event.target.value)}
+            >
+              {alignmentOptions.map((option) => (
+                <option key={option.value} value={option.value}>{option.label}</option>
+              ))}
+            </select>
           </div>
-          <div className="field">
-            <label>צבע טקסט</label>
-            <input type="color" aria-label="צבע טקסט" value={form.textColor} onChange={(event) => update('textColor', event.target.value)} />
-          </div>
-        </div>
-
-        <div className="field">
-          <label>יישור טקסט</label>
-          <select className="select" value={form.textAlign} onChange={(event) => update('textAlign', event.target.value)}>
-            <option value="right">ימין</option>
-            <option value="center">מרכז</option>
-            <option value="left">שמאל</option>
-          </select>
         </div>
       </section>
 
-      <article className="secret-preview-card">
+      <article className="secret-preview-card" aria-labelledby="composer-preview-title">
+        <h3 id="composer-preview-title">תצוגה מקדימה</h3>
         <div
           className="secret-preview-body"
           style={{
-            background: previewBackground,
+            background: form.backgroundColor,
             color: ensureReadableTextColor(form.backgroundColor, form.textColor),
             textAlign: form.textAlign
           }}
@@ -171,10 +170,12 @@ export default function SecretComposer({
         </div>
       </article>
 
-      {error && <p className="error">{error}</p>}
-      <button className="btn primary" disabled={submitting}>
-        {submitting ? submitLoadingLabel : submitLabel}
-      </button>
+      <div className="composer-submit-row">
+        {error && <p className="error">{error}</p>}
+        <button className="btn primary composer-submit" disabled={!canSubmit}>
+          {submitting ? submitLoadingLabel : submitLabel}
+        </button>
+      </div>
     </form>
   );
 }

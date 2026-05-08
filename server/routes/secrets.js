@@ -1,4 +1,4 @@
-const express = require('express');
+﻿const express = require('express');
 const { query, transaction } = require('../db');
 const { requireAuth, optionalAuth } = require('../middleware/auth');
 const { schemas } = require('../validation');
@@ -95,11 +95,6 @@ router.get('/feed', optionalAuth, async (req, res, next) => {
 router.post('/', requireAuth, async (req, res, next) => {
   try {
     const data = schemas.secret.parse(req.body);
-    const recent = await query(
-      'SELECT id FROM secrets WHERE user_id = :id AND is_deleted = 0 AND created_at > (UTC_TIMESTAMP() - INTERVAL 24 HOUR) LIMIT 1',
-      { id: req.user.id }
-    );
-    if (recent.length) return res.status(429).json({ message: 'אפשר לפרסם סוד אחד בכל 24 שעות' });
     const title = makeTitle(data.content);
     const slug = makeSlug(title);
     const result = await query(
